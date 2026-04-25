@@ -1,0 +1,13 @@
+spec_version: 1
+name: pantry_pulse
+version: 1.0.0
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+description: "A 30-day high-protein logistics simulator testing long-horizon planning and state-tracking under resource constraints."
+author: "Adit"
+tags:
+  - long-horizon
+  - logistics
+  - nutrition
