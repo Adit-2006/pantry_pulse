@@ -1,6 +1,6 @@
 ---
 title: Pantry Pulse Environment Server
-emoji: 🖱️
+emoji: 🥫
 colorFrom: purple
 colorTo: green
 sdk: docker
@@ -13,7 +13,27 @@ tags:
 
 # Pantry Pulse Environment
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+A reinforcement learning environment that simulates 30-day household pantry management. The agent must intelligently purchase groceries, manage inventory, minimize waste from spoilage, and satisfy daily nutritional needs — all within a fixed weekly budget.
+
+> 📖 **Read the blog post:** [Pantry Pulse: Long-Horizon Logistics & Nutrition Simulation](./Blog.md)
+
+## Training Glimpse
+
+<details>
+<summary>🚀 Live Training Loop — first 5 episodes</summary>
+
+```
+🚀 Starting Live Training Loop (100 Episodes)...
+Episode 1/100 | Reward: -11.04
+Episode 2/100 | Reward:   0.00
+Episode 3/100 | Reward: -10.08
+Episode 4/100 | Reward:  -8.79
+Episode 5/100 | Reward:   1.72
+```
+
+</details>
+
+---
 
 ## Quick Start
 
@@ -24,45 +44,47 @@ from pantry_pulse import PantryPulseAction, PantryPulseEnv
 
 try:
     # Create environment from Docker image
-    pantry_pulseenv = PantryPulseEnv.from_docker_image("pantry_pulse-env:latest")
+    env = PantryPulseEnv.from_docker_image("pantry_pulse-env:latest")
 
-    # Reset
-    result = pantry_pulseenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+    # Reset to day 1
+    result = env.reset()
+    print(f"Day: {result.observation.day}")
+    print(f"Budget remaining: ${result.observation.budget_remaining:.2f}")
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
-
-    for msg in messages:
-        result = pantry_pulseenv.step(PantryPulseAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+    # Step through the simulation
+    for day in range(30):
+        action = PantryPulseAction(purchases={"rice": 2, "chicken": 1})
+        result = env.step(action)
+        print(f"Day {result.observation.day} → Reward: {result.reward:.2f}")
+        if result.done:
+            break
 
 finally:
     # Always clean up
-    pantry_pulseenv.close()
+    env.close()
 ```
 
-That's it! The `PantryPulseEnv.from_docker_image()` method handles:
+The `PantryPulseEnv.from_docker_image()` method handles:
 - Starting the Docker container
 - Waiting for the server to be ready
 - Connecting to the environment
 - Container cleanup when you call `close()`
 
+---
+
 ## Building the Docker Image
 
-Before using the environment, you need to build the Docker image:
+Before using the environment, build the Docker image from the project root:
 
 ```bash
-# From project root
 docker build -t pantry_pulse-env:latest -f server/Dockerfile .
 ```
 
+---
+
 ## Deploying to Hugging Face Spaces
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+Deploy your environment to Hugging Face Spaces using the `openenv push` command:
 
 ```bash
 # From the environment directory (where openenv.yaml is located)
@@ -74,24 +96,26 @@ openenv push --namespace my-org --private
 
 The `openenv push` command will:
 1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+2. Prepare a custom build for Hugging Face Docker Spaces (enables web interface)
+3. Upload to Hugging Face (prompting for login if not already authenticated)
 
 ### Prerequisites
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+- Authenticate with Hugging Face — the command will prompt for login if not already done.
 
 ### Options
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--directory` | `-d` | Directory containing the OpenEnv environment (defaults to current directory) |
+| `--repo-id` | `-r` | Repository ID in format `username/repo-name` (defaults to `username/env-name` from `openenv.yaml`) |
+| `--base-image` | `-b` | Base Docker image to use (overrides Dockerfile `FROM`) |
+| `--private` | — | Deploy the space as private (default: public) |
 
 ### Examples
 
 ```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
+# Push to your personal namespace
 openenv push
 
 # Push to a specific repository
@@ -111,49 +135,70 @@ After deployment, your space will be available at:
 `https://huggingface.co/spaces/<repo-id>`
 
 The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+
+| Endpoint | Description |
+|----------|-------------|
+| `/web` | Interactive UI for exploring the environment |
+| `/docs` | Full OpenAPI / Swagger interface |
+| `/health` | Container health monitoring |
+| `/ws` | Persistent WebSocket session for low-latency interactions |
+
+---
 
 ## Environment Details
 
 ### Action
-**PantryPulseAction**: Contains a single field
-- `message` (str) - The message to echo back
+
+**`PantryPulseAction`** — Represents the agent's purchasing decision for a given day.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `purchases` | `dict[str, int]` | Item name → quantity to purchase |
 
 ### Observation
-**PantryPulseObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
+
+**`PantryPulseObservation`** — The environment state returned after each step.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `day` | `int` | Current simulation day (1–30) |
+| `inventory` | `dict` | Current pantry stock with expiry info |
+| `budget_remaining` | `float` | Budget left for the week |
+| `nutrition_met` | `bool` | Whether today's nutritional needs were satisfied |
+| `items_expired` | `list[str]` | Items that expired today |
+| `reward` | `float` | Reward signal for this step |
+| `done` | `bool` | `True` on day 30 or budget exhaustion |
+| `metadata` | `dict` | Additional info (step count, waste log, etc.) |
 
 ### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
+
+The reward function balances nutrition, waste minimization, and budget efficiency:
+
+| Component | Signal |
+|-----------|--------|
+| Nutrition goal met | `+1.0` per day |
+| Item expired (waste) | `−0.5` per item |
+| Over weekly budget | `−2.0` |
+| Episode completion bonus | `+5.0` |
+
+---
 
 ## Advanced Usage
 
 ### Connecting to an Existing Server
 
-If you already have a Pantry Pulse environment server running, you can connect directly:
+If a Pantry Pulse server is already running, connect directly:
 
 ```python
 from pantry_pulse import PantryPulseEnv
 
-# Connect to existing server
-pantry_pulseenv = PantryPulseEnv(base_url="<ENV_HTTP_URL_HERE>")
+env = PantryPulseEnv(base_url="<ENV_HTTP_URL_HERE>")
 
-# Use as normal
-result = pantry_pulseenv.reset()
-result = pantry_pulseenv.step(PantryPulseAction(message="Hello!"))
+result = env.reset()
+result = env.step(PantryPulseAction(purchases={"eggs": 6}))
 ```
 
-Note: When connecting to an existing server, `pantry_pulseenv.close()` will NOT stop the server.
+> **Note:** When connecting to an existing server, `env.close()` will **not** stop the server.
 
 ### Using the Context Manager
 
@@ -162,53 +207,57 @@ The client supports context manager usage for automatic connection management:
 ```python
 from pantry_pulse import PantryPulseAction, PantryPulseEnv
 
-# Connect with context manager (auto-connects and closes)
 with PantryPulseEnv(base_url="http://localhost:8000") as env:
     result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(PantryPulseAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
+    for day in range(30):
+        action = PantryPulseAction(purchases={"bread": 1, "milk": 1})
+        result = env.step(action)
+        print(f"Day {result.observation.day} → Reward: {result.reward:.2f}")
+        if result.done:
+            break
 ```
 
 The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
+- **Lower latency** — no HTTP connection overhead per request
+- **Persistent session** — server maintains environment state across steps
+- **Efficient for episodes** — ideal for many sequential steps
 
 ### Concurrent WebSocket Sessions
 
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
+The server supports multiple concurrent WebSocket connections. Enable this by modifying `server/app.py` to use factory mode:
 
 ```python
-# In server/app.py - use factory mode for concurrent sessions
+# In server/app.py — use factory mode for concurrent sessions
 app = create_app(
-    PantryPulseEnvironment,  # Pass class, not instance
+    PantryPulseEnvironment,   # Pass class, not instance
     PantryPulseAction,
     PantryPulseObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
+    max_concurrent_envs=4,    # Allow 4 concurrent sessions
 )
 ```
 
-Then multiple clients can connect simultaneously:
+Run multiple episodes concurrently:
 
 ```python
 from pantry_pulse import PantryPulseAction, PantryPulseEnv
 from concurrent.futures import ThreadPoolExecutor
 
-def run_episode(client_id: int):
+def run_episode(agent_id: int):
     with PantryPulseEnv(base_url="http://localhost:8000") as env:
         result = env.reset()
-        for i in range(10):
-            result = env.step(PantryPulseAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
+        for day in range(30):
+            action = PantryPulseAction(purchases={"rice": 1, "chicken": 1})
+            result = env.step(action)
+            if result.done:
+                break
+        return agent_id, result.reward
 
 # Run 4 episodes concurrently
 with ThreadPoolExecutor(max_workers=4) as executor:
     results = list(executor.map(run_episode, range(4)))
 ```
+
+---
 
 ## Development & Testing
 
@@ -217,14 +266,14 @@ with ThreadPoolExecutor(max_workers=4) as executor:
 Test the environment logic directly without starting the HTTP server:
 
 ```bash
-# From the server directory
+# From the project root
 python3 server/pantry_pulse_environment.py
 ```
 
 This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
+- Environment resets correctly to day 1
+- Step executes purchase actions and updates inventory
+- Expiration logic fires on the correct days
 - Rewards are calculated correctly
 
 ### Running Locally
@@ -235,21 +284,23 @@ Run the server locally for development:
 uvicorn server.app:app --reload
 ```
 
+---
+
 ## Project Structure
 
 ```
 pantry_pulse/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # PantryPulseEnv client
-├── models.py              # Action and Observation models
+├── .dockerignore                        # Docker build exclusions
+├── __init__.py                          # Module exports
+├── README.md                            # This file
+├── openenv.yaml                         # OpenEnv manifest
+├── pyproject.toml                       # Project metadata and dependencies
+├── uv.lock                              # Locked dependencies (generated)
+├── client.py                            # PantryPulseEnv client
+├── models.py                            # Action and Observation models
 └── server/
-    ├── __init__.py        # Server module exports
-    ├── pantry_pulse_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+    ├── __init__.py                      # Server module exports
+    ├── pantry_pulse_environment.py      # Core environment logic
+    ├── app.py                           # FastAPI app (HTTP + WebSocket)
+    └── Dockerfile                       # Container image definition
 ```
